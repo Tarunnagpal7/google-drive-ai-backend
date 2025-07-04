@@ -21,7 +21,9 @@ def authorize():
 
     flow = google_auth_oauthlib.flow.Flow.from_client_secrets_file(
         os.environ["GOOGLE_CLIENT_SECRET_FILE"], SCOPES)
-    flow.redirect_uri = url_for('auth.oauth2callback', _external=True)
+    flow.redirect_uri = os.environ.get("REDIRECT_URI", url_for('auth.oauth2callback', _external=True))
+    print("🔁 REDIRECT_URI:", flow.redirect_uri)
+    print("🌍 FRONTEND_URL:", os.environ.get("FRONTEND_URL"))
 
     auth_url, state = flow.authorization_url(
         access_type='offline',
@@ -50,7 +52,8 @@ def oauth2callback():
         scopes=SCOPES,
         state=state
     )
-    flow.redirect_uri = url_for('auth.oauth2callback', _external=True)
+    flow.redirect_uri = os.environ.get("REDIRECT_URI", url_for('auth.oauth2callback', _external=True))
+
 
     # Finalize the flow and get credentials
     flow.fetch_token(authorization_response=request.url)
