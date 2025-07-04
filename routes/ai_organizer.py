@@ -74,69 +74,56 @@ openai_api = os.environ.get("OPENAI_KEY")
 client = OpenAI(api_key=openai_api)
 
 
-def generate_file_rename_prompt(file_list: List[Dict[str, Any]]) -> str:
+def generate_file_rename_prompt(file_list: List[Dict[str, Any]], pattern: str) -> str:
     """Generate a detailed prompt for AI file organization"""
 
     files_text = ""
     for i, file in enumerate(file_list, 1):
-        files_text += f"{i}. {file['name']} ({file['type']})\n"
+        files_text += f"{i}. {file['name']} ({file['type']})\n"    
 
     prompt = f"""
-You are an expert file organizer. I have {len(file_list)} files/folders that need to be organized and renamed for better structure.
+You are a professional AI assistant and expert file organizer. I have {len(file_list)} files and folders that need to be cleaned, renamed, and optionally organized into a more meaningful folder structure.
 
-Files to organize:
-{files_text}
-
-Please provide suggestions for:
-1. Better, more descriptive file names (keep original extensions)
-2. Logical folder structure to organize these files
-3. Clear reasoning for each suggestion
-
-General Rules:
+**Naming Instructions:**
+- Use this optional naming format if provided by the user: {pattern or 'No custom pattern given'}
+- Follow common naming conventions like PascalCase or snake_case
 - Keep file extensions intact
-- Use descriptive, professional naming (PascalCase or snake_case)
-- Suggest folders that group related content
-- Remove unnecessary characters, numbers, abbreviations
-- Make names searchable and meaningful
-- If it's a chapter/lesson, include numbers in proper format
+- Remove unnecessary characters, underscores, numbers, or redundant words
+- Avoid duplicate or conflicting names
+- Ensure clarity, readability, and relevance to content
 
-My COMPANY Rules:
-1. Always make the top-level folder the company, project, or client name if it exists (e.g., OmmRudraksha, Spacenos).
-2. Inside each company folder, use subfolders based on function: SEO, Reports, Financials, Guides, Designs, Projects, etc.
-3. Do not repeat the company name inside subfolder names. Use human-friendly folder names with spaces.
-4. Avoid naming collisions or overly deep folder structures.
-5. Spacenos, Sensewire, Infiprime, RIT are businesses.
-6. If no company or project is identifiable, use 'General'.
+**Foldering Instructions:**
+- Group related files under folders such as Reports, Invoices, Projects, Chapters, etc.
+- If a company or client name is detected (like Spacenos, Sensewire, Infiprime, RIT, OmmRudraksha), use it as the top-level folder.
+- Do **not** move a folder into itself or into another folder with the same name — skip such suggestions.
+- Avoid redundant nesting (e.g., "OmmRudraksha/OmmRudraksha_Reports")
+- If no business context is clear, use "General" or skip foldering
 
-For each file or folder, suggest:
-- A new clean filename (remove underscores, clarify purpose, based on content)
-- A logical target folder (in the format 'Company/Function', or based on files content)
-- A clear reason for the suggestion
+**Required Output (JSON only):**
+For every file or folder, suggest:
+- A cleaner, more professional new name
+- A logical folder path (if reorganization is useful)
+- A reason explaining why the suggestion was made
 
-Respond with a JSON array where each object has:
-{{
-  "id": "original_file_id", 
-  "currentName": "current file name",
-  "newName": "suggested new name",
-  "newFolder": "suggested folder path (optional)",
-  "type": "file or folder",
-  "reason": "explanation for the change"
-}}
+Respond strictly in the following JSON format:
 
-Example response:
 [
   {{
-    "id": "file_1",
-    "currentName": "ch25.pdf",
-    "newName": "Chapter_25_Advanced_Topics.pdf",
-    "newFolder": "Course_Materials/Chapters",
-    "type": "file",
-    "reason": "More descriptive name with proper chapter formatting"
+    "id": "original_file_id",
+    "currentName": "original_name.ext",
+    "newName": "Improved_File_Name.ext",
+    "newFolder": "Company/Department" (optional),
+    "type": "file" or "folder",
+    "reason": "Short explanation for the change"
   }}
 ]
 
-Only return valid JSON, no other text.
+Only return valid JSON. Do not include markdown, commentary, or any additional text.
+Here is the list of files/folders:
+
+{files_text}
 """
+
     return prompt
 
 def get_ai_suggestions(prompt: str) -> List[Dict[str, Any]]:
@@ -228,6 +215,7 @@ def ai_rename_preview():
             return jsonify({"error": "Not authorized"}), 401
 
         data = request.get_json()
+        pattern = data.get('pattern', "")
         selected_files = data.get('selectedFiles', [])
         if not selected_files:
             return jsonify({"error": "No files selected"}), 400
@@ -247,7 +235,7 @@ def ai_rename_preview():
                 "content": content
             })
 
-        prompt = generate_file_rename_prompt(enriched_files)
+        prompt = generate_file_rename_prompt(enriched_files, pattern)
         suggestions = get_ai_suggestions(prompt)
 
         for i, suggestion in enumerate(suggestions):
