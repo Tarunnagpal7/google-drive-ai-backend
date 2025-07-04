@@ -8,6 +8,8 @@ from routes import register_routes
 import os
 
 app = Flask(__name__)
+app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+app.config['SESSION_COOKIE_SECURE'] = True
 app.secret_key = 'super-secret'
 
 # CORS + SocketIO
