@@ -17,5 +17,7 @@ CORS(app, supports_credentials=True, origins=[os.environ.get("FRONTEND_URL")])
 register_routes(app)
 
 if __name__ == "__main__":
-    port = int(os.environ.get("PORT", 5000))  # use PORT from Render
-    socketio.run(app, host="0.0.0.0", port=port)  # bind to 0.0.0.0 for external access
+    port = int(os.environ.get("PORT") or 5000) 
+    socketio.run(app, host="0.0.0.0", port=port, debug=True)
+
+
