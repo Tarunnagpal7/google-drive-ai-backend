@@ -3,6 +3,7 @@ import os
 import json
 from flask import Blueprint, request, jsonify, session
 from googleapiclient.discovery import build
+from googleapiclient.http import MediaIoBaseDownload
 from google.oauth2.credentials import Credentials
 from openai import OpenAI
 import re
@@ -11,9 +12,65 @@ from typing import List, Dict, Any
 import fitz  # PyMuPDF
 from docx import Document
 import tempfile
-
-
 def extract_file_content(service, file_id, mime_type) -> str:
+    """
+    Extracts first ~200 words from PDF or DOCX.
+    Skips unsupported types like images/videos.
+    Limits extraction to keep processing fast even with 100+ files.
+    """
+    try:
+        metadata = service.files().get(fileId=file_id, fields="size, name").execute()
+        if int(metadata.get('size', 0)) > 10_000_000:
+            print(f"Skipping large file: {metadata['name']}")
+            return ""
+
+        content = ""
+
+        with tempfile.NamedTemporaryFile(delete=False, suffix=".bin") as tmp_file:
+            tmp_path = tmp_file.name
+            request = service.files().get_media(fileId=file_id)
+            downloader = MediaIoBaseDownload(tmp_file, request)
+            done = False
+            while not done:
+                status, done = downloader.next_chunk()
+
+        if mime_type == 'application/pdf':
+            pdf_path = tmp_path.replace(".bin", ".pdf")
+            os.rename(tmp_path, pdf_path)
+            doc = fitz.open(pdf_path)
+
+            words = []
+            for page in doc:
+                text = page.get_text()
+                words.extend(text.split())
+                if len(words) >= 200:
+                    break
+            doc.close()
+            os.remove(pdf_path)
+            content = " ".join(words[:200])
+
+        elif mime_type == 'application/vnd.openxmlformats-officedocument.wordprocessingml.document':
+            docx_path = tmp_path.replace(".bin", ".docx")
+            os.rename(tmp_path, docx_path)
+            doc = Document(docx_path)
+
+            words = []
+            for para in doc.paragraphs:
+                words.extend(para.text.split())
+                if len(words) >= 200:
+                    break
+            os.remove(docx_path)
+            content = " ".join(words[:200])
+
+        else:
+            os.remove(tmp_path)
+            return ""  # Skip non-text files (image, video, etc.)
+
+        return content.strip()
+
+    except Exception as e:
+        print(f"[extract_file_content] Error for {file_id}: {e}")
+        return ""
     """
     Extracts first ~200 words from PDF or DOCX.
     Skips unsupported types like images/videos.
@@ -139,7 +196,7 @@ def get_ai_suggestions(prompt: str) -> List[Dict[str, Any]]:
                 {"role": "user", "content": prompt}
             ],
             temperature=0.7,
-            max_tokens=2000
+            max_tokens=1000
         )
         
         content = response.choices[0].message.content.strip()
